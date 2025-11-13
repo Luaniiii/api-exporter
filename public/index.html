@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API-to-File Exporter</title>
+    <link rel="stylesheet" href="stylesheets/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 API-to-File Exporter</h1>
+            <p class="subtitle">Automate API data fetching and file exports</p>
+        </header>
+
+        <div class="main-content">
+            <!-- Add Endpoint Section -->
+            <section class="card">
+                <h2>➕ Add New Endpoint</h2>
+                <form id="endpointForm">
+                    <div class="form-group">
+                        <label for="name">Name *</label>
+                        <input type="text" id="name" required placeholder="My API Endpoint">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="url">API URL *</label>
+                        <input type="url" id="url" required placeholder="https://api.example.com/data">
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="method">Method</label>
+                            <select id="method">
+                                <option value="GET">GET</option>
+                                <option value="POST">POST</option>
+                                <option value="PUT">PUT</option>
+                                <option value="PATCH">PATCH</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="saveFormat">Save Format</label>
+                            <select id="saveFormat">
+                                <option value="json">JSON</option>
+                                <option value="csv">CSV</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="schedule">Schedule (Cron)</label>
+                        <input type="text" id="schedule" placeholder="*/5 * * * *" value="*/5 * * * *">
+                        <small>Examples: */5 * * * * (every 5 min), 0 * * * * (hourly), 0 0 * * * (daily)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="savePath">Save Path</label>
+                        <input type="text" id="savePath" placeholder="./data" value="./data">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="maxFileAgeDays">Data Retention (Days)</label>
+                        <input type="number" id="maxFileAgeDays" placeholder="Leave empty for no auto-delete" min="1">
+                        <small>Files older than this many days will be automatically deleted. Leave empty to keep all files.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="headers">Headers (JSON)</label>
+                        <textarea id="headers" rows="3" placeholder='{"Authorization": "Bearer token"}'></textarea>
+                    </div>
+
+                    <div class="form-group checkbox-group">
+                        <label>
+                            <input type="checkbox" id="notifyOnChange">
+                            Notify on data changes
+                        </label>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Create Endpoint</button>
+                </form>
+            </section>
+
+            <!-- Endpoints List Section -->
+            <section class="card">
+                <div class="section-header">
+                    <h2>📋 Endpoints</h2>
+                    <button class="btn btn-secondary" onclick="loadEndpoints()">🔄 Refresh</button>
+                </div>
+                <div id="endpointsList" class="endpoints-list">
+                    <div class="loading">Loading endpoints...</div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Modal for Files -->
+    <div id="filesModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeFilesModal()">&times;</span>
+            <h2>📁 Saved Files</h2>
+            <div id="filesContent" class="files-content"></div>
+        </div>
+    </div>
+
+    <!-- Modal for Edit Endpoint -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeEditModal()">&times;</span>
+            <h2>✏️ Edit Endpoint</h2>
+            <form id="editEndpointForm">
+                <input type="hidden" id="editId">
+                <div class="form-group">
+                    <label for="editName">Name *</label>
+                    <input type="text" id="editName" required placeholder="My API Endpoint">
+                </div>
+                
+                <div class="form-group">
+                    <label for="editUrl">API URL *</label>
+                    <input type="url" id="editUrl" required placeholder="https://api.example.com/data">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editMethod">Method</label>
+                        <select id="editMethod">
+                            <option value="GET">GET</option>
+                            <option value="POST">POST</option>
+                            <option value="PUT">PUT</option>
+                            <option value="PATCH">PATCH</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="editSaveFormat">Save Format</label>
+                        <select id="editSaveFormat">
+                            <option value="json">JSON</option>
+                            <option value="csv">CSV</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="editSchedule">Schedule (Cron)</label>
+                    <input type="text" id="editSchedule" placeholder="*/5 * * * *">
+                    <small>Examples: */5 * * * * (every 5 min), 0 * * * * (hourly), 0 0 * * * (daily)</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="editSavePath">Save Path</label>
+                    <input type="text" id="editSavePath" placeholder="./data">
+                </div>
+
+                <div class="form-group">
+                    <label for="editMaxFileAgeDays">Data Retention (Days)</label>
+                    <input type="number" id="editMaxFileAgeDays" placeholder="Leave empty for no auto-delete" min="1">
+                    <small>Files older than this many days will be automatically deleted. Leave empty to keep all files.</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="editHeaders">Headers (JSON)</label>
+                    <textarea id="editHeaders" rows="3" placeholder='{"Authorization": "Bearer token"}'></textarea>
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="editNotifyOnChange">
+                        Notify on data changes
+                    </label>
+                </div>
+
+                <div style="display: flex; gap: 10px;">
+                    <button type="submit" class="btn btn-primary" style="flex: 1;">Update Endpoint</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeEditModal()" style="flex: 1;">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal for Data Viewer -->
+    <div id="dataViewerModal" class="modal">
+        <div class="modal-content" style="max-width: 90%;">
+            <span class="close" onclick="closeDataViewerModal()">&times;</span>
+            <h2>👁️ Data Viewer</h2>
+            <div id="dataViewerContent" class="data-viewer-content"></div>
+        </div>
+    </div>
+
+    <!-- Modal for Diff Viewer -->
+    <div id="diffViewerModal" class="modal">
+        <div class="modal-content" style="max-width: 95%;">
+            <span class="close" onclick="closeDiffViewerModal()">&times;</span>
+            <h2>🔍 Data Comparison</h2>
+            <div id="diffViewerContent" class="diff-viewer-content"></div>
+        </div>
+    </div>
+
+    <!-- Modal for Logs -->
+    <div id="logsModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeLogsModal()">&times;</span>
+            <h2>📝 Execution Logs</h2>
+            <div id="logsContent" class="logs-content"></div>
+        </div>
+    </div>
+
+    <!-- Modal for Trend Viewer -->
+    <div id="trendViewerModal" class="modal">
+        <div class="modal-content" style="max-width: 95%;">
+            <span class="close" onclick="closeTrendViewerModal()">&times;</span>
+            <h2>📈 Data Trends</h2>
+            <div id="trendViewerContent" class="trend-viewer-content">
+                <div id="trendChartContainer" style="position: relative; height: 400px; margin-top: 20px;">
+                    <canvas id="trendChart"></canvas>
+                </div>
+                <div id="trendInfo" style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="javascripts/app.js"></script>
+</body>
+</html>
+
