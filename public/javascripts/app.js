@@ -1,10 +1,6 @@
 const API_BASE = '/api';
 
-document.addEventListener('DOMContentLoaded', () => {
-    loadEndpoints();
-    document.getElementById('endpointForm').addEventListener('submit', handleFormSubmit);
-    document.getElementById('editEndpointForm').addEventListener('submit', handleEditSubmit);
-});
+// Note: DOMContentLoaded listener moved to bottom of file after handleAggregateSubmit function
 
 async function loadEndpoints() {
     const listContainer = document.getElementById('endpointsList');
@@ -43,6 +39,9 @@ function createEndpointCard(endpoint) {
                 </button>
                 <button class="btn btn-secondary btn-small" onclick="viewFiles('${endpoint.id}')">
                     📁 Files
+                </button>
+                <button class="btn btn-secondary btn-small" onclick="downloadAllFiles('${endpoint.id}')" title="Download all files as ZIP">
+                    📦 Download All
                 </button>
                 <button class="btn btn-secondary btn-small" onclick="viewTrends('${endpoint.id}')">
                     📈 Trends
@@ -304,6 +303,21 @@ async function viewFiles(endpointId) {
 
         if (data.ok && data.files && data.files.length > 0) {
             filesContent.innerHTML = '';
+            
+            // Add download buttons at the top
+            const downloadButtons = document.createElement('div');
+            downloadButtons.className = 'download-buttons-container';
+            downloadButtons.style.cssText = 'margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; display: flex; gap: 10px; flex-wrap: wrap;';
+            downloadButtons.innerHTML = `
+                <button class="btn btn-primary btn-small" onclick="downloadAllFiles('${endpointId}')">
+                    📦 Download All Files (ZIP)
+                </button>
+                <button class="btn btn-primary btn-small" onclick="openAggregateModal('${endpointId}')">
+                    📊 Download Aggregated Data
+                </button>
+            `;
+            filesContent.appendChild(downloadButtons);
+            
             data.files.forEach(file => {
                 filesContent.appendChild(createFileItem(file));
             });
@@ -1013,6 +1027,7 @@ window.onclick = function(event) {
     const dataViewerModal = document.getElementById('dataViewerModal');
     const diffViewerModal = document.getElementById('diffViewerModal');
     const trendViewerModal = document.getElementById('trendViewerModal');
+    const aggregateModal = document.getElementById('aggregateModal');
     if (event.target === logsModal) {
         logsModal.style.display = 'none';
     }
@@ -1030,6 +1045,9 @@ window.onclick = function(event) {
     }
     if (event.target === trendViewerModal) {
         closeTrendViewerModal();
+    }
+    if (event.target === aggregateModal) {
+        closeAggregateModal();
     }
 }
 
@@ -1058,5 +1076,174 @@ function getScheduleDescription(cron) {
     };
     
     return descriptions[cron] || cron;
+}
+
+async function downloadAllFiles(endpointId) {
+    try {
+        const url = `${API_BASE}/endpoints/${endpointId}/download-all`;
+        
+        // Show loading indicator
+        const loadingMsg = document.createElement('div');
+        loadingMsg.className = 'loading';
+        loadingMsg.textContent = 'Preparing ZIP file...';
+        loadingMsg.style.cssText = 'position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 2000;';
+        document.body.appendChild(loadingMsg);
+        
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            let errorData;
+            try {
+                errorData = JSON.parse(errorText);
+            } catch (e) {
+                errorData = { error: errorText };
+            }
+            throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const blob = await response.blob();
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        
+        // Get filename from Content-Disposition header or use default
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let filename = 'all-files.zip';
+        if (contentDisposition) {
+            // Try to extract from filename*=UTF-8''... first (RFC 5987)
+            let filenameMatch = contentDisposition.match(/filename\*=UTF-8''(.+?)(?:;|$)/);
+            if (filenameMatch) {
+                try {
+                    filename = decodeURIComponent(filenameMatch[1]);
+                } catch (e) {
+                    // Fall back to regular filename
+                }
+            }
+            // If not found, try regular filename parameter
+            if (filename === 'all-files.zip') {
+                filenameMatch = contentDisposition.match(/filename="?([^";]+)"?/);
+                if (filenameMatch) {
+                    filename = filenameMatch[1].trim();
+                }
+            }
+        }
+        
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(downloadUrl);
+        
+        document.body.removeChild(loadingMsg);
+    } catch (error) {
+        alert(`❌ Error downloading files: ${error.message}`);
+        console.error('Download all files error:', error);
+        const loadingMsg = document.querySelector('.loading[style*="position: fixed"]');
+        if (loadingMsg) {
+            document.body.removeChild(loadingMsg);
+        }
+    }
+}
+
+function openAggregateModal(endpointId) {
+    document.getElementById('aggregateEndpointId').value = endpointId;
+    document.getElementById('aggregateFields').value = '';
+    document.getElementById('aggregateFormat').value = 'json';
+    document.getElementById('aggregateModal').style.display = 'block';
+}
+
+function closeAggregateModal() {
+    document.getElementById('aggregateModal').style.display = 'none';
+    document.getElementById('aggregateForm').reset();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadEndpoints();
+    document.getElementById('endpointForm').addEventListener('submit', handleFormSubmit);
+    document.getElementById('editEndpointForm').addEventListener('submit', handleEditSubmit);
+    document.getElementById('aggregateForm').addEventListener('submit', handleAggregateSubmit);
+});
+
+async function handleAggregateSubmit(e) {
+    e.preventDefault();
+    
+    const endpointId = document.getElementById('aggregateEndpointId').value;
+    const fields = document.getElementById('aggregateFields').value.trim();
+    const format = document.getElementById('aggregateFormat').value;
+    
+    try {
+        let url = `${API_BASE}/endpoints/${endpointId}/aggregate?format=${format}`;
+        if (fields) {
+            url += `&fields=${encodeURIComponent(fields)}`;
+        }
+        
+        // Show loading indicator
+        const loadingMsg = document.createElement('div');
+        loadingMsg.className = 'loading';
+        loadingMsg.textContent = 'Generating aggregated file...';
+        loadingMsg.style.cssText = 'position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 2000;';
+        document.body.appendChild(loadingMsg);
+        
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            let errorData;
+            try {
+                errorData = JSON.parse(errorText);
+            } catch (e) {
+                errorData = { error: errorText };
+            }
+            throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        // Get filename from Content-Disposition header
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let filename = null;
+        if (contentDisposition) {
+            // Try to extract from filename*=UTF-8''... first (RFC 5987)
+            let filenameMatch = contentDisposition.match(/filename\*=UTF-8''(.+?)(?:;|$)/);
+            if (filenameMatch) {
+                try {
+                    filename = decodeURIComponent(filenameMatch[1]);
+                } catch (e) {
+                    // Fall back to regular filename
+                }
+            }
+            // If not found, try regular filename parameter
+            if (!filename) {
+                filenameMatch = contentDisposition.match(/filename="?([^";]+)"?/);
+                if (filenameMatch) {
+                    filename = filenameMatch[1].trim();
+                }
+            }
+        }
+        // Use default if still not found
+        if (!filename) {
+            filename = `aggregated-${Date.now()}.${format}`;
+        }
+        
+        const blob = await response.blob();
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(downloadUrl);
+        
+        document.body.removeChild(loadingMsg);
+        closeAggregateModal();
+        alert('✅ Aggregated file downloaded successfully!');
+    } catch (error) {
+        alert(`❌ Error: ${error.message}`);
+        console.error('Aggregate download error:', error);
+        const loadingMsg = document.querySelector('.loading[style*="position: fixed"]');
+        if (loadingMsg) {
+            document.body.removeChild(loadingMsg);
+        }
+    }
 }
 

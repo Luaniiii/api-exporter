@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const path = require('path');
 const fs = require('fs');
+const archiver = require('archiver');
 const models = require('../models');
 const runner = require('../jobs/runner');
 const config = require('../config');
@@ -17,7 +18,7 @@ router.get('/endpoints', (req, res) => {
     }
 });
 
-// Get files for endpoint - MUST be before /endpoints/:id route
+// Get files for endpoint
 router.get('/endpoints/:id/files', (req, res) => {
     try {
         const endpoint = models.getEndpointById(req.params.id);
@@ -40,7 +41,7 @@ router.get('/endpoints/:id/files', (req, res) => {
                 };
             })
             .filter(file => fs.existsSync(file.path))
-            .sort((a, b) => new Date(b.runTime) - new Date(a.runTime)); // Most recent first
+            .sort((a, b) => new Date(b.runTime) - new Date(a.runTime));
         
         res.json({ ok: true, files });
     } catch (err) {
@@ -48,7 +49,7 @@ router.get('/endpoints/:id/files', (req, res) => {
     }
 });
 
-// Get trend data for endpoint - all files with parsed numeric values
+// Get trend data for endpoint
 router.get('/endpoints/:id/trends', (req, res) => {
     try {
         const endpoint = models.getEndpointById(req.params.id);
@@ -90,7 +91,7 @@ router.get('/endpoints/:id/trends', (req, res) => {
                 }
             })
             .filter(file => file !== null)
-            .sort((a, b) => new Date(a.runTime) - new Date(b.runTime)); // Oldest first for trends
+            .sort((a, b) => new Date(a.runTime) - new Date(b.runTime));
         
         res.json({ ok: true, files, endpoint });
     } catch (err) {
@@ -98,7 +99,7 @@ router.get('/endpoints/:id/trends', (req, res) => {
     }
 });
 
-// Get logs for endpoint - MUST be before /endpoints/:id route
+// Get logs for endpoint
 router.get('/endpoints/:id/logs', (req, res) => {
     try {
         const logs = models.getLogsForEndpoint(req.params.id);
@@ -108,7 +109,185 @@ router.get('/endpoints/:id/logs', (req, res) => {
     }
 });
 
-// Get single endpoint - This must come AFTER more specific routes
+// Download all files for an endpoint as ZIP
+router.get('/endpoints/:id/download-all', (req, res) => {
+    try {
+        const endpoint = models.getEndpointById(req.params.id);
+        if (!endpoint) return res.status(404).json({ ok: false, error: 'Endpoint not found' });
+        
+        // Get all logs with file paths for this endpoint
+        const logs = models.getLogsForEndpoint(req.params.id);
+        const files = logs
+            .filter(log => log.filePath && log.status === 'success')
+            .map(log => log.filePath)
+            .filter(filePath => fs.existsSync(filePath));
+        
+        if (files.length === 0) {
+            return res.status(404).json({ ok: false, error: 'No files found for this endpoint' });
+        }
+        
+        const zipFileName = `${endpoint.name.replace(/[^a-z0-9-_]/gi, '_').toLowerCase()}-all-files.zip`;
+        res.setHeader('Content-Type', 'application/zip');
+        const encodedFileName = encodeURIComponent(zipFileName);
+        res.setHeader('Content-Disposition', `attachment; filename="${zipFileName}"; filename*=UTF-8''${encodedFileName}`);
+        
+        const archive = archiver('zip', { zlib: { level: 9 } });
+        
+        archive.on('error', (err) => {
+            console.error('Archive error:', err);
+            if (!res.headersSent) {
+                res.status(500).json({ ok: false, error: 'Failed to create archive' });
+            }
+        });
+        
+        archive.pipe(res);
+        
+        files.forEach((filePath) => {
+            const fileName = path.basename(filePath);
+            archive.file(filePath, { name: fileName });
+        });
+        
+        archive.finalize();
+    } catch (err) {
+        console.error('Download all files error:', err);
+        if (!res.headersSent) {
+            res.status(500).json({ ok: false, error: err.message });
+        }
+    }
+});
+
+// Download aggregated data file
+router.get('/endpoints/:id/aggregate', (req, res) => {
+    try {
+        const endpoint = models.getEndpointById(req.params.id);
+        if (!endpoint) return res.status(404).json({ ok: false, error: 'Endpoint not found' });
+        
+        const fieldsParam = req.query.fields || req.query.field || '';
+        const fieldsToExtract = fieldsParam ? fieldsParam.split(',').map(f => f.trim()).filter(f => f) : null;
+        const format = req.query.format || 'json';
+        
+        const logs = models.getLogsForEndpoint(req.params.id);
+        const files = logs
+            .filter(log => log.filePath && log.status === 'success')
+            .map(log => ({ path: log.filePath, runTime: log.runTime }))
+            .filter(file => fs.existsSync(file.path))
+            .sort((a, b) => new Date(a.runTime) - new Date(b.runTime));
+        
+        if (files.length === 0) {
+            return res.status(404).json({ ok: false, error: 'No files found for this endpoint' });
+        }
+        
+        const aggregatedData = [];
+        
+        files.forEach((file) => {
+            try {
+                const content = fs.readFileSync(file.path, 'utf8');
+                let data = null;
+                
+                if (file.path.endsWith('.json')) {
+                    data = JSON.parse(content);
+                } else if (file.path.endsWith('.csv')) {
+                    const lines = content.split('\n').filter(l => l.trim());
+                    if (lines.length > 1) {
+                        const headers = lines[0].split(',').map(h => h.trim());
+                        data = lines.slice(1).map(line => {
+                            const values = line.split(',').map(v => v.trim());
+                            const obj = {};
+                            headers.forEach((header, idx) => {
+                                obj[header] = values[idx] || '';
+                            });
+                            return obj;
+                        });
+                    }
+                }
+                
+                if (data) {
+                    const items = Array.isArray(data) ? data : [data];
+                    
+                    items.forEach(item => {
+                        if (typeof item === 'object' && item !== null) {
+                            const extracted = {};
+                            
+                            if (fieldsToExtract && fieldsToExtract.length > 0) {
+                                fieldsToExtract.forEach(field => {
+                                    if (item.hasOwnProperty(field)) {
+                                        extracted[field] = item[field];
+                                    }
+                                });
+                            } else {
+                                Object.assign(extracted, item);
+                            }
+                            
+                            extracted._fileTime = file.runTime;
+                            extracted._fileName = path.basename(file.path);
+                            
+                            aggregatedData.push(extracted);
+                        }
+                    });
+                }
+            } catch (err) {
+                console.error(`Error processing file ${file.path}:`, err.message);
+            }
+        });
+        
+        if (aggregatedData.length === 0) {
+            return res.status(400).json({ ok: false, error: 'No data could be extracted from files' });
+        }
+        
+        const baseName = endpoint.name.replace(/[^a-z0-9-_]/gi, '_').toLowerCase();
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const extension = format === 'csv' ? 'csv' : 'json';
+        const fileName = `${baseName}-aggregated-${timestamp}.${extension}`;
+        
+        const encodedFileName = encodeURIComponent(fileName);
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"; filename*=UTF-8''${encodedFileName}`);
+        
+        if (format === 'csv') {
+            if (aggregatedData.length === 0) {
+                return res.status(400).json({ ok: false, error: 'No data to export' });
+            }
+            
+            const flattenedData = aggregatedData.map(item => flattenObject(item));
+            
+            const allKeys = new Set();
+            flattenedData.forEach(item => {
+                Object.keys(item).forEach(key => allKeys.add(key));
+            });
+            const headers = Array.from(allKeys).sort();
+            
+            let csvContent = headers.join(',') + '\n';
+            flattenedData.forEach(item => {
+                const row = headers.map(header => {
+                    const value = item[header] !== undefined && item[header] !== null ? item[header] : '';
+                    let stringValue;
+                    if (typeof value === 'object') {
+                        stringValue = JSON.stringify(value);
+                    } else {
+                        stringValue = String(value);
+                    }
+                    if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+                        return `"${stringValue.replace(/"/g, '""')}"`;
+                    }
+                    return stringValue;
+                });
+                csvContent += row.join(',') + '\n';
+            });
+            
+            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+            res.send(csvContent);
+        } else {
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.send(JSON.stringify(aggregatedData, null, 2));
+        }
+    } catch (err) {
+        console.error('Aggregate data error:', err);
+        if (!res.headersSent) {
+            res.status(500).json({ ok: false, error: err.message });
+        }
+    }
+});
+
+// Get single endpoint
 router.get('/endpoints/:id', (req, res) => {
     try {
         const endpoint = models.getEndpointById(req.params.id);
@@ -194,7 +373,7 @@ router.post('/endpoints/:id/run', async (req, res) => {
     }
 });
 
-// Get file content - MUST be before /files/download
+// Get file content
 router.get('/files/content', (req, res) => {
     try {
         let filePath = req.query.path;
@@ -202,18 +381,15 @@ router.get('/files/content', (req, res) => {
             return res.status(400).json({ ok: false, error: 'File path is required' });
         }
         
-        // Decode the path (may be double-encoded)
         try {
             filePath = decodeURIComponent(filePath);
-            // If it still looks encoded, decode again
             if (filePath.includes('%')) {
                 filePath = decodeURIComponent(filePath);
             }
         } catch (e) {
-            // If decoding fails, use as-is
+            // use as-is
         }
         
-        // Security: ensure file is within data directory
         const resolvedPath = path.resolve(filePath);
         const dataDir = path.resolve(config.DATA_DIR);
         const projectRoot = path.resolve(process.cwd());
@@ -258,7 +434,7 @@ router.get('/files/content', (req, res) => {
     }
 });
 
-// Compare two files (diff) - MUST be before /files/download
+// Compare two files
 router.get('/files/compare', (req, res) => {
     try {
         let filePath1 = req.query.path1;
@@ -268,11 +444,9 @@ router.get('/files/compare', (req, res) => {
             return res.status(400).json({ ok: false, error: 'Both file paths are required' });
         }
         
-        // Decode paths (may be double-encoded)
         try {
             filePath1 = decodeURIComponent(filePath1);
             filePath2 = decodeURIComponent(filePath2);
-            // If they still look encoded, decode again
             if (filePath1.includes('%')) {
                 filePath1 = decodeURIComponent(filePath1);
             }
@@ -280,10 +454,9 @@ router.get('/files/compare', (req, res) => {
                 filePath2 = decodeURIComponent(filePath2);
             }
         } catch (e) {
-            // If decoding fails, use as-is
+            // use as-is
         }
         
-        // Security checks
         const resolvedPath1 = path.resolve(filePath1);
         const resolvedPath2 = path.resolve(filePath2);
         const dataDir = path.resolve(config.DATA_DIR);
@@ -301,7 +474,6 @@ router.get('/files/compare', (req, res) => {
         const content1 = fs.readFileSync(resolvedPath1, 'utf8');
         const content2 = fs.readFileSync(resolvedPath2, 'utf8');
         
-        // Simple diff algorithm for JSON/text
         const diff = computeDiff(content1, content2);
         
         res.json({ 
@@ -316,7 +488,26 @@ router.get('/files/compare', (req, res) => {
     }
 });
 
-// Simple diff computation
+function flattenObject(obj, prefix = '', result = {}) {
+    for (const key in obj) {
+        if (obj.hasOwnProperty(key)) {
+            const newKey = prefix ? `${prefix}.${key}` : key;
+            const value = obj[key];
+            
+            if (value === null || value === undefined) {
+                result[newKey] = '';
+            } else if (typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+                // Recursively flatten nested objects
+                flattenObject(value, newKey, result);
+            } else {
+                // Keep arrays and primitives as-is (will be JSON stringified in CSV)
+                result[newKey] = value;
+            }
+        }
+    }
+    return result;
+}
+
 function computeDiff(text1, text2) {
     const lines1 = text1.split('\n');
     const lines2 = text2.split('\n');
@@ -350,15 +541,12 @@ router.get('/files/download', (req, res) => {
             return res.status(400).json({ ok: false, error: 'File path is required' });
         }
         
-        // Decode the path (it comes URL-encoded)
         filePath = decodeURIComponent(filePath);
         
-        // Security: ensure file is within data directory
         const resolvedPath = path.resolve(filePath);
         const dataDir = path.resolve(config.DATA_DIR);
         const projectRoot = path.resolve(process.cwd());
         
-        // Check if file is within allowed directory
         if (!resolvedPath.startsWith(dataDir) && !resolvedPath.startsWith(projectRoot)) {
             console.error('Access denied:', { resolvedPath, dataDir, projectRoot });
             return res.status(403).json({ ok: false, error: 'Access denied' });
@@ -371,7 +559,6 @@ router.get('/files/download', (req, res) => {
         
         const fileName = path.basename(resolvedPath);
         
-        // Set proper headers for file download
         res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
         res.setHeader('Content-Type', 'application/octet-stream');
         

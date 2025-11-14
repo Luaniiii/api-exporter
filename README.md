@@ -254,6 +254,65 @@ POST /api/endpoints/:id/run
 }
 ```
 
+#### 7. Download All Files for Endpoint (ZIP)
+
+```http
+GET /api/endpoints/:id/download-all
+```
+
+Downloads all files for an endpoint as a ZIP archive.
+
+**Response:**
+- Returns a ZIP file containing all files for the endpoint
+- Filename format: `{endpoint-name}-all-files.zip`
+
+**Example:**
+```bash
+curl -O -J http://localhost:3000/api/endpoints/{endpoint-id}/download-all
+```
+
+#### 8. Download Aggregated Data File
+
+```http
+GET /api/endpoints/:id/aggregate
+```
+
+Creates and downloads a single file containing aggregated data from all files for an endpoint. Useful for extracting specific fields (like prices) from multiple files into one consolidated file.
+
+**Query Parameters:**
+- `fields` (optional) - Comma-separated list of field names to extract (e.g., `fields=price,symbol`). If not provided, all fields are extracted.
+- `format` (optional) - Output format: `json` (default) or `csv`
+
+**Response:**
+- Returns a JSON or CSV file with aggregated data from all files
+- Each entry includes metadata: `_fileTime` and `_fileName` to track source file
+
+**Examples:**
+
+Download all prices and symbols from all files:
+```bash
+curl -O -J "http://localhost:3000/api/endpoints/{endpoint-id}/aggregate?fields=price,symbol&format=json"
+```
+
+Download all data as CSV:
+```bash
+curl -O -J "http://localhost:3000/api/endpoints/{endpoint-id}/aggregate?format=csv"
+```
+
+Download only price field:
+```bash
+curl -O -J "http://localhost:3000/api/endpoints/{endpoint-id}/aggregate?fields=price"
+```
+
+**Example Use Case:**
+If you have multiple files with data like:
+```json
+{ "symbol": "BTCUSDT", "price": "97253.18000000" }
+{ "symbol": "BTCUSDT", "price": "97010.80000000" }
+```
+
+The aggregated file will contain all prices from all files in chronological order, making it easy to track price changes over time.
+
 ## 📁 Project Structure
 
 ```

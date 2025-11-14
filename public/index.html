@@ -219,6 +219,36 @@
         </div>
     </div>
 
+    <!-- Modal for Aggregate Download -->
+    <div id="aggregateModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeAggregateModal()">&times;</span>
+            <h2>📊 Download Aggregated Data</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 20px;">
+                Extract and combine data from all files into a single file. Useful for tracking specific fields (like prices) over time.
+            </p>
+            <form id="aggregateForm">
+                <input type="hidden" id="aggregateEndpointId">
+                <div class="form-group">
+                    <label for="aggregateFields">Fields to Extract (optional)</label>
+                    <input type="text" id="aggregateFields" placeholder="price,symbol (leave empty for all fields)">
+                    <small>Comma-separated list of field names. Example: price,symbol</small>
+                </div>
+                <div class="form-group">
+                    <label for="aggregateFormat">Format</label>
+                    <select id="aggregateFormat">
+                        <option value="json">JSON</option>
+                        <option value="csv">CSV</option>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button type="submit" class="btn btn-primary" style="flex: 1;">⬇️ Download Aggregated File</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeAggregateModal()" style="flex: 1;">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script src="javascripts/app.js"></script>
 </body>
 </html>

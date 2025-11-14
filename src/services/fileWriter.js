@@ -21,6 +21,24 @@ async function writeJSON(saveDir, baseName, data) {
 }
 
 
+function flattenObject(obj, prefix = '', result = {}) {
+    for (const key in obj) {
+        if (obj.hasOwnProperty(key)) {
+            const newKey = prefix ? `${prefix}.${key}` : key;
+            const value = obj[key];
+            
+            if (value === null || value === undefined) {
+                result[newKey] = '';
+            } else if (typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+                flattenObject(value, newKey, result);
+            } else {
+                result[newKey] = value;
+            }
+        }
+    }
+    return result;
+}
+
 async function writeCSV(saveDir, baseName, data) {
     ensureDir(saveDir);
     if (!Array.isArray(data)) throw new Error('CSV export expects array data');
@@ -30,19 +48,67 @@ async function writeCSV(saveDir, baseName, data) {
         return emptyF;
     }
     
-    // Collect all possible keys from all objects to handle varying structures
-    const allKeys = new Set();
-    data.forEach(item => {
-        if (typeof item === 'object' && item !== null) {
-            Object.keys(item).forEach(key => allKeys.add(key));
-        }
+    const isPrimitiveArray = data.every(item => {
+        if (item === null || item === undefined) return true;
+        if (Array.isArray(item)) return true;
+        return typeof item !== 'object';
     });
     
-    // Convert Set to sorted array for consistent column order
-    const header = Array.from(allKeys).sort().map(k => ({ id: k, title: k }));
+    let processedData;
+    let header;
+    
+    if (isPrimitiveArray) {
+        processedData = data.map((item, index) => {
+            const processed = { index: index + 1 };
+            if (item === null || item === undefined) {
+                processed.value = '';
+            } else if (typeof item === 'object' && Array.isArray(item)) {
+                processed.value = JSON.stringify(item);
+            } else {
+                processed.value = String(item);
+            }
+            return processed;
+        });
+        header = [
+            { id: 'index', title: 'index' },
+            { id: 'value', title: 'value' }
+        ];
+    } else {
+        const flattenedData = data.map(item => {
+            if (typeof item === 'object' && item !== null && !Array.isArray(item)) {
+                return flattenObject(item);
+            }
+            return { value: item };
+        });
+        
+        const allKeys = new Set();
+        flattenedData.forEach(item => {
+            if (typeof item === 'object' && item !== null) {
+                Object.keys(item).forEach(key => allKeys.add(key));
+            }
+        });
+        
+        header = Array.from(allKeys).sort().map(k => ({ id: k, title: k }));
+        
+        processedData = flattenedData.map(item => {
+            const processed = {};
+            for (const key in item) {
+                const value = item[key];
+                if (value === null || value === undefined) {
+                    processed[key] = '';
+                } else if (typeof value === 'object') {
+                    processed[key] = JSON.stringify(value);
+                } else {
+                    processed[key] = value;
+                }
+            }
+            return processed;
+        });
+    }
+    
     const filename = path.join(saveDir, `${baseName}-${isoFilename()}.csv`);
     const csvWriter = createObjectCsvWriter({ path: filename, header });
-    await csvWriter.writeRecords(data);
+    await csvWriter.writeRecords(processedData);
     return filename;
 }
 
