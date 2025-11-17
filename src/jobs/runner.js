@@ -3,6 +3,7 @@ const fs = require('fs');
 const models = require('../models');
 const { fetchEndpoint } = require('../services/fetcher');
 const { writeJSON, writeCSV } = require('../services/fileWriter');
+const { sendDiscordNotification } = require('../services/notifier');
 
 
 function hashString(str) {
@@ -86,11 +87,58 @@ async function runJob(endpoint) {
             diffDetected = true;
         }
 
-
         const log = models.createLog({ endpointId: endpoint.id, status: 'success', filePath, diffDetected });
+
+        // Send Discord notification if enabled and changes detected
+        if (endpoint.notifyOnChange && diffDetected) {
+            try {
+                await sendDiscordNotification(
+                    {
+                        webhookUrl: endpoint.discordWebhookUrl || null,
+                        botToken: endpoint.discordBotToken || null,
+                        userId: endpoint.discordUserId || null
+                    },
+                    {
+                        endpointName: endpoint.name,
+                        endpointUrl: endpoint.url,
+                        filePath: filePath,
+                        diffDetected: diffDetected,
+                        status: 'success'
+                    }
+                );
+            } catch (notifyError) {
+                console.error(`Failed to send Discord notification for endpoint ${endpoint.id}:`, notifyError.message);
+                // Don't fail the job if notification fails
+            }
+        }
+
         return { ok: true, log };
     } catch (err) {
         const log = models.createLog({ endpointId: endpoint.id, status: 'error', errorMessage: err.message });
+        
+        // Send Discord notification on error if enabled
+        if (endpoint.notifyOnChange) {
+            try {
+                await sendDiscordNotification(
+                    {
+                        webhookUrl: endpoint.discordWebhookUrl || null,
+                        botToken: endpoint.discordBotToken || null,
+                        userId: endpoint.discordUserId || null
+                    },
+                    {
+                        endpointName: endpoint.name,
+                        endpointUrl: endpoint.url,
+                        diffDetected: false,
+                        status: 'error',
+                        errorMessage: err.message
+                    }
+                );
+            } catch (notifyError) {
+                console.error(`Failed to send Discord error notification for endpoint ${endpoint.id}:`, notifyError.message);
+                // Don't fail the job if notification fails
+            }
+        }
+        
         return { ok: false, error: err.message, log };
     }
 }

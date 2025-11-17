@@ -78,6 +78,33 @@
                         </label>
                     </div>
 
+                    <div id="discordNotificationGroup" style="display: none;">
+                        <div class="form-group">
+                            <label>Notification Method</label>
+                            <select id="discordNotificationMethod">
+                                <option value="webhook">Webhook (Channel)</option>
+                                <option value="dm">Direct Message (DM)</option>
+                            </select>
+                            <small>Choose how to receive Discord notifications</small>
+                        </div>
+
+                        <div class="form-group" id="discordWebhookGroup" style="display: block;">
+                            <label for="discordWebhookUrl">Discord Webhook URL</label>
+                            <input type="url" id="discordWebhookUrl" placeholder="https://discord.com/api/webhooks/...">
+                            <small>Enter your Discord webhook URL to receive notifications in a channel</small>
+                        </div>
+
+                        <div class="form-group" id="discordDMGroup" style="display: none;">
+                            <label for="discordBotToken">Discord Bot Token</label>
+                            <input type="text" id="discordBotToken" placeholder="Your bot token">
+                            <small>Your Discord bot token (get it from Discord Developer Portal)</small>
+                            
+                            <label for="discordUserId" style="margin-top: 10px; display: block;">Your Discord User ID</label>
+                            <input type="text" id="discordUserId" placeholder="Your Discord user ID">
+                            <small>Your Discord user ID (enable Developer Mode in Discord, right-click your profile → Copy ID)</small>
+                        </div>
+                    </div>
+
                     <button type="submit" class="btn btn-primary">Create Endpoint</button>
                 </form>
             </section>
@@ -168,6 +195,33 @@
                         <input type="checkbox" id="editNotifyOnChange">
                         Notify on data changes
                     </label>
+                </div>
+
+                <div id="editDiscordNotificationGroup" style="display: none;">
+                    <div class="form-group">
+                        <label>Notification Method</label>
+                        <select id="editDiscordNotificationMethod">
+                            <option value="webhook">Webhook (Channel)</option>
+                            <option value="dm">Direct Message (DM)</option>
+                        </select>
+                        <small>Choose how to receive Discord notifications</small>
+                    </div>
+
+                    <div class="form-group" id="editDiscordWebhookGroup" style="display: block;">
+                        <label for="editDiscordWebhookUrl">Discord Webhook URL</label>
+                        <input type="url" id="editDiscordWebhookUrl" placeholder="https://discord.com/api/webhooks/...">
+                        <small>Enter your Discord webhook URL to receive notifications in a channel</small>
+                    </div>
+
+                    <div class="form-group" id="editDiscordDMGroup" style="display: none;">
+                        <label for="editDiscordBotToken">Discord Bot Token</label>
+                        <input type="text" id="editDiscordBotToken" placeholder="Your bot token">
+                        <small>Your Discord bot token (get it from Discord Developer Portal)</small>
+                        
+                        <label for="editDiscordUserId" style="margin-top: 10px; display: block;">Your Discord User ID</label>
+                        <input type="text" id="editDiscordUserId" placeholder="Your Discord user ID">
+                        <small>Your Discord user ID (enable Developer Mode in Discord, right-click your profile → Copy ID)</small>
+                    </div>
                 </div>
 
                 <div style="display: flex; gap: 10px;">

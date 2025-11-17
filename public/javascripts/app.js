@@ -89,6 +89,7 @@ async function handleFormSubmit(e) {
     
     const maxAge = document.getElementById('maxFileAgeDays').value.trim();
     
+    const notifyMethod = document.getElementById('discordNotificationMethod').value;
     const formData = {
         name: document.getElementById('name').value,
         url: document.getElementById('url').value,
@@ -97,6 +98,9 @@ async function handleFormSubmit(e) {
         saveFormat: document.getElementById('saveFormat').value,
         savePath: document.getElementById('savePath').value || './data',
         notifyOnChange: document.getElementById('notifyOnChange').checked,
+        discordWebhookUrl: notifyMethod === 'webhook' ? (document.getElementById('discordWebhookUrl').value.trim() || null) : null,
+        discordBotToken: notifyMethod === 'dm' ? (document.getElementById('discordBotToken').value.trim() || null) : null,
+        discordUserId: notifyMethod === 'dm' ? (document.getElementById('discordUserId').value.trim() || null) : null,
         maxFileAgeDays: maxAge ? parseInt(maxAge, 10) : null
     };
 
@@ -155,6 +159,26 @@ async function editEndpoint(id) {
             document.getElementById('editHeaders').value = JSON.stringify(ep.headers || {}, null, 2);
             document.getElementById('editNotifyOnChange').checked = ep.notifyOnChange === 1 || ep.notifyOnChange === true;
             
+            // Set notification method based on what's configured
+            const hasWebhook = ep.discordWebhookUrl && ep.discordWebhookUrl.trim();
+            const hasDM = ep.discordBotToken && ep.discordUserId;
+            const notificationMethod = hasDM ? 'dm' : (hasWebhook ? 'webhook' : 'webhook');
+            
+            document.getElementById('editDiscordNotificationMethod').value = notificationMethod;
+            document.getElementById('editDiscordWebhookUrl').value = ep.discordWebhookUrl || '';
+            document.getElementById('editDiscordBotToken').value = ep.discordBotToken || '';
+            document.getElementById('editDiscordUserId').value = ep.discordUserId || '';
+            
+            // Show/hide Discord notification fields based on checkbox
+            const discordNotificationGroup = document.getElementById('editDiscordNotificationGroup');
+            if (discordNotificationGroup) {
+                const isChecked = ep.notifyOnChange === 1 || ep.notifyOnChange === true;
+                discordNotificationGroup.style.display = isChecked ? 'block' : 'none';
+                
+                // Show/hide method-specific fields
+                updateDiscordMethodFields('edit', notificationMethod);
+            }
+            
             document.getElementById('editModal').style.display = 'block';
         } else {
             alert(`❌ Error: ${data.error || 'Failed to load endpoint'}`);
@@ -173,6 +197,7 @@ async function handleEditSubmit(e) {
     const savePath = document.getElementById('editSavePath').value.trim();
     const maxAge = document.getElementById('editMaxFileAgeDays').value.trim();
     
+    const editNotifyMethod = document.getElementById('editDiscordNotificationMethod').value;
     const formData = {
         name: document.getElementById('editName').value.trim(),
         url: document.getElementById('editUrl').value.trim(),
@@ -181,6 +206,9 @@ async function handleEditSubmit(e) {
         saveFormat: document.getElementById('editSaveFormat').value,
         savePath: savePath || './data',
         notifyOnChange: document.getElementById('editNotifyOnChange').checked,
+        discordWebhookUrl: editNotifyMethod === 'webhook' ? (document.getElementById('editDiscordWebhookUrl').value.trim() || null) : null,
+        discordBotToken: editNotifyMethod === 'dm' ? (document.getElementById('editDiscordBotToken').value.trim() || null) : null,
+        discordUserId: editNotifyMethod === 'dm' ? (document.getElementById('editDiscordUserId').value.trim() || null) : null,
         maxFileAgeDays: maxAge ? parseInt(maxAge, 10) : null
     };
 
@@ -1158,11 +1186,58 @@ function closeAggregateModal() {
     document.getElementById('aggregateForm').reset();
 }
 
+// Helper function to update Discord method fields visibility
+function updateDiscordMethodFields(prefix, method) {
+    const webhookGroup = document.getElementById(prefix === 'edit' ? 'editDiscordWebhookGroup' : 'discordWebhookGroup');
+    const dmGroup = document.getElementById(prefix === 'edit' ? 'editDiscordDMGroup' : 'discordDMGroup');
+    
+    if (method === 'webhook') {
+        if (webhookGroup) webhookGroup.style.display = 'block';
+        if (dmGroup) dmGroup.style.display = 'none';
+    } else if (method === 'dm') {
+        if (webhookGroup) webhookGroup.style.display = 'none';
+        if (dmGroup) dmGroup.style.display = 'block';
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     loadEndpoints();
     document.getElementById('endpointForm').addEventListener('submit', handleFormSubmit);
     document.getElementById('editEndpointForm').addEventListener('submit', handleEditSubmit);
     document.getElementById('aggregateForm').addEventListener('submit', handleAggregateSubmit);
+    
+    // Show/hide Discord notification fields based on checkbox
+    const notifyCheckbox = document.getElementById('notifyOnChange');
+    const discordNotificationGroup = document.getElementById('discordNotificationGroup');
+    if (notifyCheckbox && discordNotificationGroup) {
+        notifyCheckbox.addEventListener('change', function() {
+            discordNotificationGroup.style.display = this.checked ? 'block' : 'none';
+        });
+    }
+    
+    // Handle notification method change
+    const notificationMethod = document.getElementById('discordNotificationMethod');
+    if (notificationMethod) {
+        notificationMethod.addEventListener('change', function() {
+            updateDiscordMethodFields('', this.value);
+        });
+    }
+    
+    const editNotifyCheckbox = document.getElementById('editNotifyOnChange');
+    const editDiscordNotificationGroup = document.getElementById('editDiscordNotificationGroup');
+    if (editNotifyCheckbox && editDiscordNotificationGroup) {
+        editNotifyCheckbox.addEventListener('change', function() {
+            editDiscordNotificationGroup.style.display = this.checked ? 'block' : 'none';
+        });
+    }
+    
+    // Handle edit notification method change
+    const editNotificationMethod = document.getElementById('editDiscordNotificationMethod');
+    if (editNotificationMethod) {
+        editNotificationMethod.addEventListener('change', function() {
+            updateDiscordMethodFields('edit', this.value);
+        });
+    }
 });
 
 async function handleAggregateSubmit(e) {

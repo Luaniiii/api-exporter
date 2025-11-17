@@ -5,8 +5,8 @@ const { v4: uuidv4 } = require('uuid');
 module.exports = {
     createEndpoint(endpoint) {
         const id = uuidv4();
-        const stmt = db.prepare(`INSERT INTO endpoints (id,name,url,method,headers,schedule,saveFormat,savePath,notifyOnChange,maxFileAgeDays,createdAt) VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
-        stmt.run(id, endpoint.name, endpoint.url, endpoint.method || 'GET', JSON.stringify(endpoint.headers || {}), endpoint.schedule || '*/5 * * * *', endpoint.saveFormat || 'json', endpoint.savePath || './data', endpoint.notifyOnChange ? 1 : 0, endpoint.maxFileAgeDays || null, new Date().toISOString());
+        const stmt = db.prepare(`INSERT INTO endpoints (id,name,url,method,headers,schedule,saveFormat,savePath,notifyOnChange,discordWebhookUrl,discordBotToken,discordUserId,maxFileAgeDays,createdAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+        stmt.run(id, endpoint.name, endpoint.url, endpoint.method || 'GET', JSON.stringify(endpoint.headers || {}), endpoint.schedule || '*/5 * * * *', endpoint.saveFormat || 'json', endpoint.savePath || './data', endpoint.notifyOnChange ? 1 : 0, endpoint.discordWebhookUrl || null, endpoint.discordBotToken || null, endpoint.discordUserId || null, endpoint.maxFileAgeDays || null, new Date().toISOString());
         return this.getEndpointById(id);
     },
 
@@ -43,9 +43,12 @@ module.exports = {
         const saveFormat = endpoint.saveFormat !== undefined ? endpoint.saveFormat : (existing.saveFormat || 'json');
         const savePath = endpoint.savePath !== undefined && endpoint.savePath !== '' ? endpoint.savePath : (existing.savePath || './data');
         const notifyOnChange = endpoint.notifyOnChange !== undefined ? (endpoint.notifyOnChange ? 1 : 0) : (existing.notifyOnChange || 0);
+        const discordWebhookUrl = endpoint.discordWebhookUrl !== undefined ? (endpoint.discordWebhookUrl || null) : (existing.discordWebhookUrl || null);
+        const discordBotToken = endpoint.discordBotToken !== undefined ? (endpoint.discordBotToken || null) : (existing.discordBotToken || null);
+        const discordUserId = endpoint.discordUserId !== undefined ? (endpoint.discordUserId || null) : (existing.discordUserId || null);
         const maxFileAgeDays = endpoint.maxFileAgeDays !== undefined ? (endpoint.maxFileAgeDays || null) : (existing.maxFileAgeDays || null);
         
-        const stmt = db.prepare(`UPDATE endpoints SET name=?, url=?, method=?, headers=?, schedule=?, saveFormat=?, savePath=?, notifyOnChange=?, maxFileAgeDays=? WHERE id=?`);
+        const stmt = db.prepare(`UPDATE endpoints SET name=?, url=?, method=?, headers=?, schedule=?, saveFormat=?, savePath=?, notifyOnChange=?, discordWebhookUrl=?, discordBotToken=?, discordUserId=?, maxFileAgeDays=? WHERE id=?`);
         const result = stmt.run(
             name,
             url,
@@ -55,6 +58,9 @@ module.exports = {
             saveFormat,
             savePath,
             notifyOnChange,
+            discordWebhookUrl,
+            discordBotToken,
+            discordUserId,
             maxFileAgeDays,
             id
         );

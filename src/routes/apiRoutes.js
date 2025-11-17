@@ -301,11 +301,11 @@ router.get('/endpoints/:id', (req, res) => {
 // Create endpoint
 router.post('/endpoints', async (req, res) => {
     try {
-        const { name, url, method, headers, schedule, saveFormat, savePath, notifyOnChange, maxFileAgeDays } = req.body;
+        const { name, url, method, headers, schedule, saveFormat, savePath, notifyOnChange, discordWebhookUrl, discordBotToken, discordUserId, maxFileAgeDays } = req.body;
         if (!name || !url) {
             return res.status(400).json({ ok: false, error: 'name and url are required' });
         }
-        const endpoint = models.createEndpoint({ name, url, method, headers, schedule, saveFormat, savePath, notifyOnChange, maxFileAgeDays });
+        const endpoint = models.createEndpoint({ name, url, method, headers, schedule, saveFormat, savePath, notifyOnChange, discordWebhookUrl, discordBotToken, discordUserId, maxFileAgeDays });
         res.status(201).json({ ok: true, endpoint });
     } catch (err) {
         res.status(500).json({ ok: false, error: err.message });
@@ -315,7 +315,7 @@ router.post('/endpoints', async (req, res) => {
 // Update endpoint
 router.put('/endpoints/:id', (req, res) => {
     try {
-        const { name, url, method, headers, schedule, saveFormat, savePath, notifyOnChange, maxFileAgeDays } = req.body;
+        const { name, url, method, headers, schedule, saveFormat, savePath, notifyOnChange, discordWebhookUrl, discordBotToken, discordUserId, maxFileAgeDays } = req.body;
         if (!name || !url) {
             return res.status(400).json({ ok: false, error: 'name and url are required' });
         }
@@ -332,6 +332,9 @@ router.put('/endpoints/:id', (req, res) => {
             saveFormat, 
             savePath, 
             notifyOnChange,
+            discordWebhookUrl,
+            discordBotToken,
+            discordUserId,
             maxFileAgeDays
         });
         

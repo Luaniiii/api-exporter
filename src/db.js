@@ -23,6 +23,9 @@ schedule TEXT,
 saveFormat TEXT,
 savePath TEXT,
 notifyOnChange INTEGER DEFAULT 0,
+discordWebhookUrl TEXT,
+discordBotToken TEXT,
+discordUserId TEXT,
 maxFileAgeDays INTEGER,
 createdAt TEXT
 );
